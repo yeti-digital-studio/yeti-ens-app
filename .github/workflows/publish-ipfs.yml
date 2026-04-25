@@ -1,0 +1,57 @@
+name: Build & Generate IPFS CID
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Astro
+        run: pnpm build
+
+      - name: Install IPFS (Kubo)
+        run: |
+          curl -L https://dist.ipfs.tech/kubo/v0.33.2/kubo_v0.33.2_linux-amd64.tar.gz -o kubo.tar.gz
+          tar -xzf kubo.tar.gz
+          sudo bash kubo/install.sh
+
+      - name: Init IPFS
+        run: |
+          ipfs init
+          ipfs daemon > /tmp/ipfs.log 2>&1 &
+          sleep 5
+
+      - name: Generate CID
+        id: ipfs
+        run: |
+          CID=$(ipfs add -r --cid-version=1 -Q dist)
+          echo "cid=$CID" >> "$GITHUB_OUTPUT"
+          echo "CID: $CID"
+
+      - name: Summary
+        run: |
+          echo "## IPFS CID" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- CID: \`${{ steps.ipfs.outputs.cid }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Gateway: https://ipfs.io/ipfs/${{ steps.ipfs.outputs.cid }}" >> $GITHUB_STEP_SUMMARY

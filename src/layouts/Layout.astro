@@ -1,0 +1,92 @@
+---
+const title = 'Dorion.eth — Yeti Grid Demo';
+const description =
+	'A decentralized cloud demo by Yeti Studio using ENS, IPFS, and containerized backend services on Yeti Grid.';
+const canonicalUrl = 'https://dorion.yetistudio.ca/';
+const ogImage = '/DORION-COA.png';
+---
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+	<title>{title}</title>
+	<meta name="description" content={description} />
+	<link rel="canonical" href={canonicalUrl} />
+
+	<meta name="robots" content="index, follow" />
+	<meta name="author" content="Yeti Studio" />
+	<meta name="generator" content={Astro.generator} />
+
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Yeti Grid" />
+	<meta property="og:title" content={title} />
+	<meta property="og:description" content={description} />
+	<meta property="og:url" content={canonicalUrl} />
+	<meta property="og:image" content={new URL(ogImage, canonicalUrl).toString()} />
+
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={title} />
+	<meta name="twitter:description" content={description} />
+	<meta name="twitter:image" content={new URL(ogImage, canonicalUrl).toString()} />
+
+	<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+	<link rel="icon" href="/favicon.png" />
+
+	<script type="application/ld+json" set:html={JSON.stringify({
+		'@context': 'https://schema.org',
+		'@type': 'WebSite',
+		name: 'Dorion.eth — Yeti Grid Demo',
+		url: canonicalUrl,
+		description,
+		publisher: {
+			'@type': 'Organization',
+			name: 'Yeti Digital Studio',
+			url: 'https://yetistudio.ca',
+		},
+		about: [
+			'Ethereum Name Service',
+			'IPFS',
+			'Decentralized cloud',
+			'Container hosting',
+			'Yeti Grid',
+		],
+	})} />
+</head>
+
+<body>
+<slot />
+</body>
+</html>
+
+<style is:global>
+	:root {
+		color-scheme: dark;
+		font-synthesis: none;
+		text-rendering: optimizeLegibility;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	html,
+	body {
+		margin: 0;
+		width: 100%;
+		min-height: 100%;
+	}
+
+	body {
+		overflow-x: hidden;
+	}
+
+	img,
+	svg {
+		max-width: 100%;
+	}
+
+	* {
+		box-sizing: border-box;
+	}
+</style>
