@@ -10,6 +10,7 @@ env:
   ENS_NAME: dorion.eth
   APP_ID: website
   VISIBILITY: public
+  R2_BUCKET: yeti-grid
 
 jobs:
   deploy:
@@ -36,6 +37,10 @@ jobs:
       - name: Build Astro
         run: pnpm build
 
+      - name: Package website
+        run: |
+          tar -C dist -czf website.tar.gz .
+
       - name: Install IPFS CLI
         run: |
           KUBO_VERSION="v0.35.0"
@@ -43,18 +48,56 @@ jobs:
           tar -xzf kubo.tar.gz
           sudo bash kubo/install.sh
 
-      - name: Init IPFS
+      - name: Compute artifact CID
         run: |
           ipfs init
-          ipfs daemon > /tmp/ipfs.log 2>&1 &
-          sleep 5
 
-      - name: Generate CID
-        id: ipfs
+          ARTIFACT_CID=$(ipfs add \
+            --cid-version=1 \
+            --raw-leaves=true \
+            --only-hash \
+            -q website.tar.gz)
+
+          echo "ARTIFACT_CID=$ARTIFACT_CID" >> "$GITHUB_ENV"
+          echo "Artifact CID: $ARTIFACT_CID"
+
+      - name: Configure R2 credentials
         run: |
-          CID=$(ipfs add -r --cid-version=1 -Q dist)
-          echo "cid=$CID" >> "$GITHUB_OUTPUT"
-          echo "CID: $CID"
+          mkdir -p ~/.aws
+
+          cat > ~/.aws/credentials <<EOF
+          [default]
+          aws_access_key_id=${{ secrets.R2_ACCESS_KEY_ID }}
+          aws_secret_access_key=${{ secrets.R2_SECRET_ACCESS_KEY }}
+          EOF
+
+          cat > ~/.aws/config <<EOF
+          [default]
+          region=auto
+          output=json
+          EOF
+
+      - name: Upload artifact to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          OBJECT_KEY="deployments/${APP_ID}/${GITHUB_SHA}/website.tar.gz"
+          echo "OBJECT_KEY=$OBJECT_KEY" >> "$GITHUB_ENV"
+
+          aws s3 cp website.tar.gz \
+            "s3://${R2_BUCKET}/${OBJECT_KEY}" \
+            --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+      - name: Create presigned artifact URL
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          ARTIFACT_URL=$(aws s3 presign \
+            "s3://${R2_BUCKET}/${OBJECT_KEY}" \
+            --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            --expires-in 900)
+
+          echo "ARTIFACT_URL=$ARTIFACT_URL" >> "$GITHUB_ENV"
 
       - name: Create deploy payload
         run: |
@@ -65,8 +108,8 @@ jobs:
             --arg type "website" \
             --arg ens_name "$ENS_NAME" \
             --arg app_id "$APP_ID" \
-            --arg artifact_url "https://ipfs.io/ipfs/${{ steps.ipfs.outputs.cid }}" \
-            --arg artifact_cid "${{ steps.ipfs.outputs.cid }}" \
+            --arg artifact_url "$ARTIFACT_URL" \
+            --arg artifact_cid "$ARTIFACT_CID" \
             --arg visibility "$VISIBILITY" \
             --arg nonce "$NONCE" \
             --argjson timestamp "$TIMESTAMP" \
@@ -131,5 +174,5 @@ jobs:
         run: |
           echo "## Yeti Grid Website Deploy" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- CID: \`${{ steps.ipfs.outputs.cid }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- IPFS Gateway: https://ipfs.io/ipfs/${{ steps.ipfs.outputs.cid }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Artifact CID: \`${ARTIFACT_CID}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- R2 Object: \`${OBJECT_KEY}\`" >> "$GITHUB_STEP_SUMMARY"
