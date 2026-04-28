@@ -1,12 +1,18 @@
-name: Build & Generate IPFS CID
+name: Deploy Website to Yeti Grid
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
 
+env:
+  ENS_NAME: dorion.eth
+  APP_ID: website
+  VISIBILITY: public
+
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,9 +36,10 @@ jobs:
       - name: Build Astro
         run: pnpm build
 
-      - name: Install IPFS (Kubo)
+      - name: Install IPFS CLI
         run: |
-          curl -L https://dist.ipfs.tech/kubo/v0.33.2/kubo_v0.33.2_linux-amd64.tar.gz -o kubo.tar.gz
+          KUBO_VERSION="v0.35.0"
+          curl -L "https://dist.ipfs.tech/kubo/${KUBO_VERSION}/kubo_${KUBO_VERSION}_linux-amd64.tar.gz" -o kubo.tar.gz
           tar -xzf kubo.tar.gz
           sudo bash kubo/install.sh
 
@@ -49,9 +56,79 @@ jobs:
           echo "cid=$CID" >> "$GITHUB_OUTPUT"
           echo "CID: $CID"
 
+      - name: Create deploy payload
+        run: |
+          TIMESTAMP=$(date +%s)
+          NONCE="${GITHUB_RUN_ID}-${GITHUB_SHA}"
+
+          jq -n \
+            --arg type "website" \
+            --arg ens_name "$ENS_NAME" \
+            --arg app_id "$APP_ID" \
+            --arg artifact_url "https://ipfs.io/ipfs/${{ steps.ipfs.outputs.cid }}" \
+            --arg artifact_cid "${{ steps.ipfs.outputs.cid }}" \
+            --arg visibility "$VISIBILITY" \
+            --arg nonce "$NONCE" \
+            --argjson timestamp "$TIMESTAMP" \
+            '{
+              type: $type,
+              ens_name: $ens_name,
+              app_id: $app_id,
+              artifact_url: $artifact_url,
+              artifact_cid: $artifact_cid,
+              visibility: $visibility,
+              env: [],
+              nonce: $nonce,
+              timestamp: $timestamp
+            }' > deploy-payload.json
+
+      - name: Sign deploy payload
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.DEPLOY_PRIVATE_KEY }}
+        run: |
+          npm install ethers@latest
+
+          node <<'EOF'
+          const fs = require("fs");
+          const { Wallet } = require("ethers");
+
+          const payload = JSON.parse(fs.readFileSync("deploy-payload.json", "utf8"));
+
+          if (Array.isArray(payload.env)) {
+            payload.env.sort((a, b) => a.name.localeCompare(b.name));
+          }
+
+          const message = JSON.stringify(payload);
+          const wallet = new Wallet(process.env.DEPLOY_PRIVATE_KEY);
+
+          async function main() {
+            const signature = await wallet.signMessage(message);
+
+            fs.writeFileSync(
+              "signed-deploy-payload.json",
+              JSON.stringify({ ...payload, signature })
+            );
+
+            console.log("Deploy signer:", wallet.address);
+          }
+
+          main().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          EOF
+
+      - name: Deploy website to Yeti Grid
+        env:
+          DEPLOY_URL: ${{ secrets.YETI_GRID_DEPLOY_URL }}
+        run: |
+          curl -f -X POST "$DEPLOY_URL" \
+            -H "Content-Type: application/json" \
+            --data @signed-deploy-payload.json
+
       - name: Summary
         run: |
-          echo "## IPFS CID" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- CID: \`${{ steps.ipfs.outputs.cid }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- Gateway: https://ipfs.io/ipfs/${{ steps.ipfs.outputs.cid }}" >> $GITHUB_STEP_SUMMARY
+          echo "## Yeti Grid Website Deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- CID: \`${{ steps.ipfs.outputs.cid }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- IPFS Gateway: https://ipfs.io/ipfs/${{ steps.ipfs.outputs.cid }}" >> "$GITHUB_STEP_SUMMARY"
