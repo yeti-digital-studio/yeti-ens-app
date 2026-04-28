@@ -82,12 +82,13 @@ jobs:
               timestamp: $timestamp
             }' > deploy-payload.json
 
+      - name: Install signing dependency
+        run: pnpm add -D ethers@latest
+
       - name: Sign deploy payload
         env:
           DEPLOY_PRIVATE_KEY: ${{ secrets.DEPLOY_PRIVATE_KEY }}
         run: |
-          npm install ethers@latest
-
           node <<'EOF'
           const fs = require("fs");
           const { Wallet } = require("ethers");
