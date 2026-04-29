@@ -1,6 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
-import resilient from '@yeti/astro-resilient';
+import resilient from '@yetistudio/astro-resilient';
 
 // https://astro.build/config
 export default defineConfig({
