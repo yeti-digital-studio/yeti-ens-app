@@ -39,7 +39,8 @@ jobs:
 
       - name: Package website
         run: |
-          tar -C dist -czf website.tar.gz .
+          test -f ipfs-site/manifest.json
+          tar -C ipfs-site -czf website.tar.gz .
 
       - name: Install IPFS CLI
         run: |
